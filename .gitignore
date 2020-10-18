@@ -1,0 +1,21 @@
+# gitignore as a whitelist
+
+# 0. ignore every file ...
+# 0.0 ignore everything
+*
+# 0.1 but not all directories
+!**/
+# 0.2 except for those directories that try to be hidden
+.*/
+__*/
+
+# 1. but track the following files
+# 1.0 files for project information
+!README.md
+!*.md
+# 1.1 files for project settings
+!.gitignore
+# 1.2 code files
+!*.ts
+
+# 2. nevertheless ignore
