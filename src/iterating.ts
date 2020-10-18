@@ -1,6 +1,8 @@
+// deno-lint-ignore-file no-explicit-any no-inferrable-types
 
 // mapped types as in https://www.typescriptlang.org/docs/handbook/advanced-types.html#mapped-types
 type IteratorTuple<T extends any[]> = { [K in keyof T]: Iterator<T[K]> }
+type A = IteratorTuple<[boolean, number]>
 type IteratorResultTuple<T extends any[]> = { [K in keyof T]: IteratorResult<T[K]> }
 // IDEA add method to handle iterators with different length sequences
 /**
@@ -18,7 +20,6 @@ export function* zip<T extends any[]>(iterators: IteratorTuple<T>): IterableIter
 		// determine next results
 		const results = iterators.map(i => i.next()) as IteratorResultTuple<T>
 
-		const resultHasNext = (result) => !result.done
 		const someHaveNext = checkAnyFulfills(results.values(), resultHasNext)
 		allHaveNext = checkAllFulfill(results.values(), resultHasNext)
 		
@@ -30,6 +31,10 @@ export function* zip<T extends any[]>(iterators: IteratorTuple<T>): IterableIter
 			yield values
 		}
 	} while (allHaveNext)
+}
+
+function resultHasNext<T> (result: IteratorResult<T>) {
+	return !result.done as boolean
 }
 
 export function getIteratorFrom<T>(iterable: Iterable<T>): Iterator<T> {
@@ -68,7 +73,7 @@ export class PeekableIterator<T> implements IterableIterator<T> {
 export function* range(
 	start: number, stop: number,
 	stepSize: number=1,
-	stopIncluded:boolean=false
+	stopIncluded: boolean=false
 ): IterableIterator<number>
 {
 	// assuming stepSize != 0
@@ -81,7 +86,7 @@ export function* range(
 			return i > stop
 		}
 	}
-	for (var i = start; continuePredicate(i, stop); i += stepSize) {
+	for (let i = start; continuePredicate(i, stop); i += stepSize) {
 		yield i
 	}
 	if (stopIncluded) {
@@ -138,12 +143,13 @@ export function* reverse<T>(iterator: Iterator<T>): IterableIterator<T> {
 	var sequence = spread(iterator)
 
 	while (sequence.length > 0){
-		yield sequence.pop()
+		yield sequence.pop() as T
 	}
 }
 
-type applyFunctor<T> = (element: T, breakAfterIteration: () => void) => void
-export function applyOnEachOf<T>(iterator: Iterator<T>, functor: applyFunctor<T>) {
+type BreakAfterIterationCallback = () => void
+type ApplyFunctor<T> = (element: T, breakAfterIteration: BreakAfterIterationCallback) => void
+export function applyOnEachOf<T>(iterator: Iterator<T>, functor: ApplyFunctor<T>) {
 	
 	var shouldBreakAfterIteration = false
 	const breakAfterIteration = () => {
@@ -164,14 +170,14 @@ export function applyOnEachOf<T>(iterator: Iterator<T>, functor: applyFunctor<T>
 type SmearFunctor<T, U, V> = (givenOn: U, element: T) => {giveOn: U, yield: V}
 export function* smear<T, U, V>(iterator: Iterator<T>, functor: SmearFunctor<T, U, V>, initialValue: U): IterableIterator<V> {
 
-	var valueToGiveOn = initialValue
+	let valueToGiveOn = initialValue
 
 	for (const element of wrapWithIterable(iterator)){
 
-		var result = functor(valueToGiveOn, element)
+		const result = functor(valueToGiveOn, element)
 
 		valueToGiveOn = result.giveOn
-		var valueToYield = result.yield
+		const valueToYield = result.yield
 
 		yield valueToYield
 	}
@@ -179,7 +185,7 @@ export function* smear<T, U, V>(iterator: Iterator<T>, functor: SmearFunctor<T, 
 
 export function sumCumulatively(iterator: Iterator<number>): IterableIterator<number>{
 
-	const functor = (givenOn, element) => {
+	const functor = (givenOn: number, element: number) => {
 
 		const cumulativeSum = givenOn + element
 
@@ -192,11 +198,11 @@ export function sumCumulatively(iterator: Iterator<number>): IterableIterator<nu
 	return smear<number, number, number>(iterator, functor, 0)
 }
 
-type ReduceFunctor<T, U> = (accumulator: U, element: T, breakAfterIteration: () => void) => U
+type ReduceFunctor<T, U> = (accumulator: U, element: T, breakAfterIteration: BreakAfterIterationCallback) => U
 export function reduce<T, U>(iterator: Iterator<T>, functor: ReduceFunctor<T, U>, initialValue: U): U {
 
-	var accumulator = initialValue
-	const applyFunctor = (element, breakAfterIteration) => {
+	let accumulator = initialValue
+	const applyFunctor: ApplyFunctor<T> = (element, breakAfterIteration) => {
 		accumulator = functor(accumulator, element, breakAfterIteration)
 	}
 
@@ -206,7 +212,7 @@ export function reduce<T, U>(iterator: Iterator<T>, functor: ReduceFunctor<T, U>
 
 export function checkAllFulfill<T>(iterator: Iterator<T>, predicate: (element: T) => boolean): boolean {
 
-	const reduceFunctor = (accumulator, element, breakAfterIteration) => {
+	const reduceFunctor: ReduceFunctor<T, boolean> = (accumulator, element, breakAfterIteration) => {
 		const elementFulfillsPredicate = predicate(element)
 
 		// break early if it is clear that not all elements fulfill predicate
@@ -223,7 +229,7 @@ export function checkAllFulfill<T>(iterator: Iterator<T>, predicate: (element: T
 export function checkAnyFulfills<T>(iterator: Iterator<T>, predicate: (element: T) => boolean): boolean {
 	// as we look for ∃ x: p(x)
 	// and ∃ x: p(x) ≡ ¬¬∃ x: p(x) ≡ ¬∀ x: ¬p(x)
-	const negatedPredicate = (element) => !predicate(element)
+	const negatedPredicate = (element: T) => !predicate(element)
 	return !checkAllFulfill(iterator, negatedPredicate)
 }
 
@@ -274,7 +280,7 @@ export class IteratorObject<T> implements IterableIterator<T> {
 		return new IteratorObject(iterator)
 	}
 
-	apply(functor: applyFunctor<T>) {
+	apply(functor: ApplyFunctor<T>) {
 
 		applyOnEachOf(this._iterator, functor)
 	}
